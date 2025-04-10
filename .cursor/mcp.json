@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "dlt": {
+      "command": "uv",
+      "args": [
+        "tool",
+        "run",
+        "--with",
+        "dlt-plus[mcp]==0.9.0",
+        "dlt",
+        "mcp",
+        "run"
+      ]
+    } 
+  }
+}

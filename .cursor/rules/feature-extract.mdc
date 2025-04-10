@@ -1,0 +1,117 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# This rule is for checking how well extraction of features works from a documentation, to enable you to separately check if issues occur on extraction of the features or creation of the pipeline.
+
+Prompt:
+
+You are an expert in configuring data extraction pipelines using dlt's rest_api_source. Given an API documentation or sample API response, extract the following configuration parameters needed to define a RESTAPIConfig object for dlt. Output the extracted information in structured JSON format.
+
+Extract the following top-level configuration fields:
+client.base_url: The root URL of the API.
+
+client.auth: Authentication type and necessary secrets or credentials.
+
+client.headers (if any): Required request headers.
+
+client.paginator: Pagination type and parameters (e.g., json_link, header_link, offset, cursor, page_number), including fields like next_url_path, offset_param, limit_param, etc.
+
+For each resource, extract:
+name: The resource name (used as the table name).
+
+endpoint.path: The path of the API endpoint.
+
+endpoint.method (optional): HTTP method used (default is GET).
+
+endpoint.params: All query parameters, including default values or dynamic values (e.g., from parent resources).
+
+endpoint.json (optional): The POST body if applicable, with placeholders for parent resource values if needed.
+
+endpoint.data_selector: JSONPath to the list of records in the response body.
+
+endpoint.paginator (optional): If pagination differs from the default client paginator.
+
+endpoint.response_actions (optional): Any status_code- or content-based response handlers.
+
+write_disposition: One of append, replace, or merge.
+
+primary_key: Primary key field(s) used for deduplication.
+
+incremental: If incremental loading is supported:
+
+Whether defined in params or incremental field.
+
+Extract start_param, end_param, cursor_path, initial_value, and any convert logic.
+
+include_from_parent (if applicable): Fields inherited from the parent resource.
+
+processing_steps: Any filter or map transformations on the records.
+
+Also extract:
+Any resource dependencies (parent-child relationships), and how the child references the parent:
+
+In path, params, or json.
+
+Specify {resources.<parent>.<field>} placeholders or legacy resolve syntax.
+
+Any seed resources (e.g., predefined lists instead of fetched parents).
+
+Output Format:
+json
+Copy
+Edit
+{
+  "client": {
+    "base_url": "...",
+    "auth": {
+      "type": "...",
+      "token": "... (if present or reference to secret)"
+    },
+    "headers": {},
+    "paginator": {
+      "type": "...",
+      "...": "..."
+    }
+  },
+  "resource_defaults": {
+    "primary_key": "...",
+    "write_disposition": "...",
+    "endpoint": {
+      "params": {}
+    }
+  },
+  "resources": [
+    {
+      "name": "resource_name",
+      "endpoint": {
+        "path": "...",
+        "method": "GET",
+        "params": {},
+        "json": {},
+        "data_selector": "...",
+        "paginator": {},
+        "response_actions": []
+      },
+      "primary_key": "...",
+      "write_disposition": "...",
+      "incremental": {
+        "type": "params" | "incremental",
+        "start_param": "...",
+        "end_param": "...",
+        "cursor_path": "...",
+        "initial_value": "...",
+        "convert": "(describe function if present)"
+      },
+      "include_from_parent": [],
+      "processing_steps": [
+        {"filter": "..."},
+        {"map": "..."}
+      ]
+    }
+  ]
+}
+When fields are not present or inferable, mark them as "unknown".
+
+
