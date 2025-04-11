@@ -1,0 +1,129 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Cursor Rule for REST API Pipeline Configuration
+1. Look for Required Client Settings
+When scanning docs or legacy code, first extract the API-level configuration including:
+
+Base URL:
+• The API’s base URL (e.g. "https://api.pipedrive.com/").
+
+Authentication:
+• The type of authentication used (commonly "api_key" or "bearer").
+• The name/key (e.g. "api_token") and its placement (usually in the query).
+• Use secrets (e.g. dlt.secrets["api_token"]) to keep credentials secure.
+
+Headers (optional):
+• Check if any custom headers are required.
+
+2. Explicit Cursor-Based Pagination Setup
+For cursor-based pagination, be explicit in your configuration:
+
+Paginator Section (at Client or Endpoint Level):
+• Type: Always set this to "cursor".
+• Cursor Path:
+– Look for the JSONPath (or analogous reference) that extracts the next-cursor value from the response (e.g., "additional_data.pagination.next_start" or similar).
+• Query Parameter Mappings:
+– If provided in legacy code or docs, set the names for cursor parameters like "offset_param" (e.g. "start") and, if available, "limit_param" (e.g. "limit").
+• Verification:
+– Ensure that the cursor parameter only drives pagination and does not mix with other pagination methods.
+
+3. Resource Defaults & Endpoint Details
+Ensure that the default settings applied across all resources are clearly delineated:
+
+Defaults:
+• Specify the default primary key (e.g., "id").
+• Define the write disposition (e.g., "merge").
+• Include common endpoint parameters (for example, a default limit value like 50).
+
+Resource-Specific Configurations:
+• For each resource, extract the endpoint path, method, and any additional query parameters.
+• If incremental loading is supported, include the minimal incremental configuration (using fields like "start_param", "cursor_path", and "initial_value"), but try to keep it within the REST API config portion.
+
+4. Declarative Configuration Over Arbitrary Code
+Focus on REST API Config:
+• Write the configuration entirely in a JSON-like structure (dictionary in Python) passed to the rest_api_source function.
+• Do not embed arbitrary or custom Python code—instead, stick closely to standard keys and values from the documentation.
+
+Minimize Python Logic:
+• Use Python only to import the dlt module, create the pipeline, and run it.
+• All transformation, pagination, and incremental logic should be purely driven by the config dictionary.
+
+5. Template Example
+Below is an annotated template that illustrates how your output should look. Use it as a reference to guide your extraction:
+
+python
+Copy
+import dlt
+from dlt.sources.rest_api import rest_api_source
+
+# Build the REST API config with cursor-based pagination
+source = rest_api_source({
+    "client": {
+        "base_url": "https://api.pipedrive.com/",  # Extract this from the docs/legacy code
+        "auth": {
+            "type": "api_key",                    # Use the documented auth type
+            "name": "api_token",
+            "api_key": dlt.secrets["api_token"],    # Replace with secure token reference
+            "location": "query"                     # Typically a query parameter for API keys
+        },
+        "paginator": {
+            "type": "cursor",                       # Must be 'cursor' for cursor-based pagination
+            "cursor_path": "additional_data.pagination.next_start",  # Extract the exact JSONPath from docs
+            "offset_param": "start",                # Use provided pagination field names if available
+            "limit_param": "limit"                  # (Optional, if supported)
+        }
+    },
+    "resource_defaults": {
+        "primary_key": "id",                        # Default primary key for resources
+        "write_disposition": "merge",               # Default write mode
+        "endpoint": {
+            "params": {
+                "limit": 50                         # Default query parameter for pagination size
+            }
+        }
+    },
+    "resources": [
+        {
+            "name": "deals",                        # Example resource name extracted from code or docs
+            "endpoint": {
+                "path": "v1/recents",               # Endpoint path to be appended to base_url
+                "method": "GET",                    # HTTP method (default is GET)
+                "params": {
+                    "items": "deal"
+                },
+                "data_selector": "data.*",          # JSONPath to extract the actual data
+                "incremental": {                    # Optional incremental configuration
+                    "start_param": "since_timestamp",
+                    "cursor_path": "update_time",
+                    "initial_value": "2023-01-01 00:00:00"
+                }
+            }
+        }
+    ]
+})
+
+if __name__ == "__main__":
+    pipeline = dlt.pipeline(
+        pipeline_name="pipedrive_rest",
+        destination="duckdb",
+        dataset_name="pipedrive_data"
+    )
+    pipeline.run(source)
+6. How to Apply This Rule
+Extraction:
+• Search both the REST API docs and any legacy pipeline code for all mentions of “cursor” or “pagination”.
+• Identify the exact keys and JSONPath expressions needed for the cursor field.
+
+Configuration Building:
+• Assemble the configuration in a dictionary that mirrors the structure in the example.
+• Ensure that each section (client, resource defaults, resources) is as declarative as possible.
+
+Verification:
+• Double-check that the configuration uses the REST API config keys correctly and that no extraneous Python code is introduced.
+
+Customization:
+• Allow for adjustments (like modifying the "initial_value") where incremental loading is desired, but always keep them within the config.
+
