@@ -1,0 +1,64 @@
+# DLT files and directories
+.dlt/
+
+# Cursor virtual environment and ignore directory
+cursor_venv/
+cursor_ignore/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# DuckDB
+*.duckdb
+*.duckdb.wal
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+
+# Python virtual environments
+venv/
+env/
+.env/
+
+# Distribution / packaging
+*.egg-info/
+
+# IDE specific files
+.DS_Store
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Local development settings
+.env.local
+*.local
+
+# Logs
+*.log
+
+# Database files
+*.db
+*.sqlite3

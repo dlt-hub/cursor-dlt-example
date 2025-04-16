@@ -1,0 +1,49 @@
+# Virtual environments
+cursor_venv/
+venv/
+env/
+.env/
+
+# Build and distribution
+dist/
+build/
+*.egg-info/
+
+# Cache files
+__pycache__/
+*.pyc
+.cache/
+
+# Dependencies
+node_modules/
+
+# Large data files
+*.csv
+*.json
+*.parquet
+*.db
+*.sqlite3
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+.tmp/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Cursor specific
+# .cursor/  # Temporarily removed to allow editing cursor rules
+
+# New additions
+cursor_ignore/
+.pytest_cache/
+.env 
