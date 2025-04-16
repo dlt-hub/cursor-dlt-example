@@ -3,4 +3,221 @@ description: Use this when you are running into issues with incremental configs
 globs: 
 alwaysApply: false
 ---
- 
+
+# dlt REST API Pagination Configuration Guide
+
+This rule explains how to configure different pagination strategies for the `dlt` `rest_api` source. Understanding the API's specific pagination method is crucial for correct configuration.
+
+**Key Principle: Endpoint-Specific Pagination**
+
+While you can set a default paginator at the `client` level, many APIs use *different* pagination methods for different endpoints. Always check the documentation for *each specific endpoint* you intend to load.
+
+If an endpoint uses a different pagination method than the default, define its `paginator` configuration within that specific resource's `endpoint` section to override the client-level setting.
+
+```python
+{
+    "client": {
+        "base_url": "...",
+        "auth": {...},
+        # Default paginator (optional)
+        "paginator": {
+            "type": "offset", 
+            # ... default offset params ...
+        }
+    },
+    "resources": [
+        {
+            "name": "standard_items",
+            "endpoint": { 
+                "path": "/items" 
+                # Inherits default offset paginator
+            }
+        },
+        {
+            "name": "special_events",
+            "endpoint": {
+                "path": "/events/stream",
+                # Override default with cursor pagination for this endpoint
+                "paginator": {
+                    "type": "cursor",
+                    "cursor_path": "meta.next_cursor",
+                    "cursor_param": "after_cursor"
+                    # Note: limit_param is set in endpoint.params, not here
+                }
+            }
+        }
+    ]
+}
+```
+
+**Configuration Methods: Declarative vs. Class-Based**
+
+1.  **Declarative (Recommended):** Define the paginator directly as a dictionary within the `rest_api_source` configuration. This avoids potential import issues caused by changes in `dlt` library structure.
+2.  **Class-Based:** Import specific paginator classes (`JSONResponseCursorPaginator`, `OffsetPaginator`, etc.) and instantiate them. This can be useful for complex or custom scenarios but is more susceptible to import path changes between `dlt` versions.
+    *   **Potential Import Paths (Check your dlt version):**
+        *   `from dlt.sources.rest_api.paginators import JSONResponseCursorPaginator, OffsetPaginator, PageNumberPaginator, HeaderLinkPaginator` (More common in recent versions)
+        *   `from dlt.sources.helpers.requests.paginators import JSONResponseCursorPaginator, OffsetPaginator, PageNumberPaginator, HeaderLinkPaginator` (Used in some older versions)
+
+---
+
+## Available Paginator Types
+
+### 1. Cursor Paginator (`type: 'cursor'`)
+
+Use when the API response contains a token, ID, or URL that points to the next page of results.
+
+**Declarative Example:**
+```python
+"paginator": {
+    "type": "cursor",
+    "cursor_path": "pagination.next_page_token", # REQUIRED: JSON path to the next page cursor/token/URL in the response
+    "cursor_param": "pageToken"             # REQUIRED: Query parameter name to send the cursor value in the next request
+    # Page size/limit is typically set outside this config, e.g., in endpoint.params
+}
+```
+
+**Class-Based Example:**
+```python
+# NOTE: The class is specifically JSONResponseCursorPaginator for this type
+from dlt.sources.rest_api.paginators import JSONResponseCursorPaginator # (Adjust import path if needed)
+
+cursor_paginator = JSONResponseCursorPaginator(
+    cursor_path="pagination.next_page_token",
+    cursor_param="pageToken"
+)
+
+# Then in the config:
+"paginator": cursor_paginator 
+```
+
+**Parameters:**
+
+| dlt Parameter Key | Required? | Description                                                                 | Typical API Terms                                |
+|-------------------|-----------|-----------------------------------------------------------------------------|--------------------------------------------------|
+| `type`            | Yes       | Must be `"cursor"` (for declarative)                                        | N/A                                              |
+| `cursor_path`     | Yes       | JSON path to the next cursor value in the API response.                     | `next_cursor`, `nextToken`, `next_page`, `marker`  |
+| `cursor_param`    | Yes       | The *query parameter name* used to send the `cursor_path` value for the next request. | `cursor`, `pageToken`, `after`, `next`, `marker` |
+| `limit_param`     | ---       | *Not configured here.* Set page size via `endpoint.params` (e.g., `"limit": 100`) | `limit`, `per_page`, `maxResults`, `page_size`     |
+| `maximum_limit`   | ---       | *Not configured here.*                                                      | N/A                                              |
+| `total_path`      | ---       | *Not configured here.* (Not part of this specific paginator type)         | `total`, `total_count`, `totalResults`           |
+
+---
+
+### 2. Offset Paginator (`type: 'offset'`)
+
+Use when the API uses a numerical offset (number of items to skip) and a limit to retrieve pages.
+
+**Declarative Example:**
+```python
+"paginator": {
+    "type": "offset",
+    "limit_param": "limit",      # REQUIRED: Query parameter name for the page size/limit
+    "offset_param": "offset",    # REQUIRED: Query parameter name for the offset (items to skip)
+    "maximum_limit": 50,       # Optional: Max value for limit_param
+    "total_path": "summary.total" # Optional: JSON path to the total number of items 
+}
+```
+
+**Class-Based Example:**
+```python
+from dlt.sources.rest_api.paginators import OffsetPaginator # (Adjust import path if needed)
+
+offset_paginator = OffsetPaginator(
+    limit_param="limit",
+    offset_param="offset",
+    maximum_limit=50,
+    total_path="summary.total"
+)
+
+# Then in the config:
+"paginator": offset_paginator
+```
+
+**Parameters:**
+
+| dlt Parameter Key | Required? | Description                                                                 | Typical API Terms                            |
+|-------------------|-----------|-----------------------------------------------------------------------------|----------------------------------------------|
+| `type`            | Yes       | Must be `"offset"` (for declarative)                                        | N/A                                          |
+| `limit_param`     | Yes       | The query parameter name for controlling the number of items per page.    | `limit`, `per_page`, `count`, `page_size`      |
+| `offset_param`    | Yes       | The query parameter name for the offset (number of items to skip).        | `offset`, `skip`, `start`, `startIndex`        |
+| `maximum_limit`   | No        | The maximum value the API allows for the `limit_param`.                     | N/A                                          |
+| `total_path`      | No        | JSON path to the total number of results field in the response (optional).  | `total`, `total_count`, `totalResults`       |
+
+---
+
+### 3. Page Number Paginator (`type: 'page'`)
+
+Use when the API uses page numbers and a page size/limit.
+
+**Declarative Example:**
+```python
+"paginator": {
+    "type": "page",
+    "limit_param": "per_page",    # REQUIRED: Query parameter name for the page size/limit
+    "page_param": "page",       # REQUIRED: Query parameter name for the page number
+    "maximum_limit": 100,       # Optional: Max value for limit_param
+    "total_path": "total_pages"   # Optional: JSON path to the total number of *pages* 
+}
+```
+
+**Class-Based Example:**
+```python
+from dlt.sources.rest_api.paginators import PageNumberPaginator # (Adjust import path if needed)
+
+page_paginator = PageNumberPaginator(
+    limit_param="per_page",
+    page_param="page",
+    maximum_limit=100,
+    total_path="total_pages"
+)
+
+# Then in the config:
+"paginator": page_paginator
+```
+
+**Parameters:**
+
+| dlt Parameter Key | Required? | Description                                                                    | Typical API Terms                            |
+|-------------------|-----------|--------------------------------------------------------------------------------|----------------------------------------------|
+| `type`            | Yes       | Must be `"page"` (for declarative)                                             | N/A                                          |
+| `limit_param`     | Yes       | The query parameter name for controlling the number of items per page.       | `limit`, `per_page`, `page_size`, `count`      |
+| `page_param`      | Yes       | The query parameter name for the page number.                                  | `page`, `page_number`, `pageNum`             |
+| `maximum_limit`   | No        | The maximum value the API allows for the `limit_param`.                        | N/A                                          |
+| `total_path`      | No        | JSON path to the total number of *pages* (or items) field in the response. | `total_pages`, `totalPages`, `total_count` |
+
+---
+
+### 4. Header Link Paginator (`type: 'link_header'`)
+
+Use when the API provides pagination links (like `next`, `last`) in the HTTP `Link` response header (RFC 5988).
+
+**Declarative Example:**
+```python
+"paginator": {
+    "type": "link_header",
+    "next_url_path": "next" # REQUIRED: The 'rel' value identifying the link for the next page (usually "next")
+}
+```
+
+**Class-Based Example:**
+```python
+from dlt.sources.rest_api.paginators import HeaderLinkPaginator # (Adjust import path if needed)
+
+link_paginator = HeaderLinkPaginator(next_url_path="next")
+
+# Then in the config:
+"paginator": link_paginator
+```
+
+**Parameters:**
+
+| dlt Parameter Key | Required? | Description                                                      | Typical API Terms | 
+|-------------------|-----------|------------------------------------------------------------------|-------------------| 
+| `type`            | Yes       | Must be `"link_header"` (for declarative)                        | N/A               | 
+| `next_url_path`   | Yes       | The `rel` value in the `Link` header that points to the next page. | `next`            | 
+
+---
+
+### 5. No Pagination
+
+If an endpoint returns all results in a single call (e.g., fetching configuration data or a single item by ID), you don't need to specify a `paginator` for that resource. 
