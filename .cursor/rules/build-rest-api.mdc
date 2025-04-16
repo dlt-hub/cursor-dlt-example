@@ -3,136 +3,197 @@ description:
 globs: 
 alwaysApply: true
 ---
-# Cursor Rule for REST API Pipeline Configuration
+Cursor Rule for REST API Pipeline Configuration
 
-## 1. Required Client Settings
+1. Look for Required Client Settings
 When scanning docs or legacy code, first extract the API-level configuration including:
 
-### Base URL:
-- The API's base URL (e.g. "https://api.pipedrive.com/").
+Base URL:
+• The API's base URL (e.g. "https://api.pipedrive.com/").
 
-### Authentication:
-- The type of authentication used (commonly "api_key" or "bearer").
-- The name/key (e.g. "api_token") and its placement (usually in the query).
-- Use secrets (e.g. dlt.secrets["api_token"]) to keep credentials secure.
+Authentication:
+• The type of authentication used (commonly "api_key" or "bearer").
+• The name/key (e.g. "api_token") and its placement (usually in the query).
+• Use secrets (e.g. dlt.secrets["api_token"]) to keep credentials secure.
 
-### Headers (optional):
-- Check if any custom headers are required.
+Headers (optional):
+• Check if any custom headers are required.
 
-## 2. Cursor-Based Pagination Setup
-For cursor-based pagination, be explicit in your configuration:
+2. Authentication Methods
+Configure the appropriate authentication method:
 
-### Paginator Section (at Client or Endpoint Level):
-- Type: Always set this to "cursor".
-- Cursor Path:
-  - Look for the JSONPath (or analogous reference) that extracts the next-cursor value from the response (e.g., "additional_data.pagination.next_start" or similar).
-- Query Parameter Mappings:
-  - If provided in legacy code or docs, set the names for cursor parameters like "offset_param" (e.g. "start") and, if available, "limit_param" (e.g. "limit").
-- Verification:
-  - Ensure that the cursor parameter only drives pagination and does not mix with other pagination methods.
-
-## 3. Resource Defaults & Endpoint Details
-Ensure that the default settings applied across all resources are clearly delineated:
-
-### Defaults:
-- Specify the default primary key (e.g., "id").
-- Define the write disposition (e.g., "merge").
-- Include common endpoint parameters (for example, a default limit value like 50).
-
-### Resource-Specific Configurations:
-- For each resource, extract the endpoint path, method, and any additional query parameters.
-- If incremental loading is supported, include the minimal incremental configuration (using fields like "start_param", "cursor_path", and "initial_value"), but try to keep it within the REST API config portion.
-
-## 4. Declarative Configuration Over Arbitrary Code
-Focus on REST API Config:
-- Write the configuration entirely in a JSON-like structure (dictionary in Python) passed to the rest_api_source function.
-- Do not embed arbitrary or custom Python code—instead, stick closely to standard keys and values from the documentation.
-
-Minimize Python Logic:
-- Use Python only to import the dlt module, create the pipeline, and run it.
-- All transformation, pagination, and incremental logic should be purely driven by the config dictionary.
-
-## 5. Template Example
-Below is an annotated template that illustrates how your output should look. Use it as a reference to guide your extraction:
-
+API Key Authentication:
 ```python
-import dlt
-from dlt.sources.rest_api import rest_api_source
-
-# Build the REST API config with cursor-based pagination
-source = rest_api_source({
-    "client": {
-        "base_url": "https://api.pipedrive.com/",  # Extract this from the docs/legacy code
-        "auth": {
-            "type": "api_key",                    # Use the documented auth type
-            "name": "api_token",
-            "api_key": dlt.secrets["api_token"],    # Replace with secure token reference
-            "location": "query"                     # Typically a query parameter for API keys
-        },
-        "paginator": {
-            "type": "cursor",                       # Must be 'cursor' for cursor-based pagination
-            "cursor_path": "additional_data.pagination.next_start",  # Extract the exact JSONPath from docs
-            "offset_param": "start",                # Use provided pagination field names if available
-            "limit_param": "limit"                  # (Optional, if supported)
-        }
-    },
-    "resource_defaults": {
-        "primary_key": "id",                        # Default primary key for resources
-        "write_disposition": "merge",               # Default write mode
-        "endpoint": {
-            "params": {
-                "limit": 50                         # Default query parameter for pagination size
-            }
-        }
-    },
-    "resources": [
-        {
-            "name": "deals",                        # Example resource name extracted from code or docs
-            "endpoint": {
-                "path": "v1/recents",               # Endpoint path to be appended to base_url
-                "method": "GET",                    # HTTP method (default is GET)
-                "params": {
-                    "items": "deal"
-                },
-                "data_selector": "data.*",          # JSONPath to extract the actual data
-                "incremental": {                    # Optional incremental configuration
-                    "start_param": "since_timestamp",
-                    "cursor_path": "update_time",
-                    "initial_value": "2023-01-01 00:00:00"
-                }
-            }
-        }
-    ]
-})
-
-if __name__ == "__main__":
-    pipeline = dlt.pipeline(
-        pipeline_name="pipedrive_rest",
-        destination="duckdb",
-        dataset_name="pipedrive_data"
-    )
-    pipeline.run(source)
+"auth": {
+    "type": "api_key",
+    "name": "api_key",
+    "api_key": dlt.secrets["api_key"],
+    "location": "query"  # or "header"
+}
 ```
 
-## 6. How to Apply This Rule
-### Extraction:
-- Search both the REST API docs and any legacy pipeline code for all mentions of "cursor" or "pagination".
-- Identify the exact keys and JSONPath expressions needed for the cursor field.
+Bearer Token Authentication:
+```python
+"auth": {
+    "type": "bearer",
+    "token": dlt.secrets["bearer_token"]
+}
+```
 
-### Configuration Building:
-- Assemble the configuration in a dictionary that mirrors the structure in the example.
-- Ensure that each section (client, resource defaults, resources) is as declarative as possible.
+Basic Authentication:
+```python
+"auth": {
+    "type": "basic",
+    "username": dlt.secrets["username"],
+    "password": dlt.secrets["password"]
+}
+```
 
-### Verification:
-- Double-check that the configuration uses the REST API config keys correctly and that no extraneous Python code is introduced.
+OAuth2 Authentication:
+```python
+"auth": {
+    "type": "oauth2",
+    "token_url": "https://auth.example.com/oauth/token",
+    "client_id": dlt.secrets["client_id"],
+    "client_secret": dlt.secrets["client_secret"],
+    "scopes": ["read", "write"]
+}
+```
 
-### Customization:
-- Allow for adjustments (like modifying the "initial_value") where incremental loading is desired, but always keep them within the config.
+3. Explicit Cursor-Based Pagination Setup
+For cursor-based pagination, be explicit in your configuration:
 
-## 7. Rate Limiting and Backoff
+Paginator Section (at Client or Endpoint Level):
+• Type: Always set this to "cursor".
+• Cursor Path:
+– Look for the JSONPath (or analogous reference) that extracts the next-cursor value from the response (e.g., "additional_data.pagination.next_start" or similar).
+• Query Parameter Mappings:
+– If provided in legacy code or docs, set the names for cursor parameters like "offset_param" (e.g. "start") and, if available, "limit_param" (e.g. "limit").
+• Verification:
+– Ensure that the cursor parameter only drives pagination and does not mix with other pagination methods.
+
+4. Multiple Pagination Strategies
+When analyzing the API documentation, carefully check for multiple pagination strategies:
+
+• Different Endpoint Types:
+  - Some endpoints might use cursor-based pagination
+  - Others might use offset-based pagination
+  - Some might use page-based pagination
+  - Some might use link-based pagination
+
+• Documentation Analysis:
+  - Look for sections describing different pagination methods
+  - Check if certain endpoints have special pagination requirements
+  - Verify if pagination parameters differ between endpoints
+  - Look for examples showing different pagination patterns
+
+• Implementation Strategy:
+  - Configure pagination at the endpoint level rather than globally
+  - Use the appropriate paginator type for each endpoint
+  - Document which endpoints use which pagination strategy
+  - Test pagination separately for each endpoint type
+
+Example of Multiple Pagination Strategies:
+```python
+"resources": [
+    {
+        "name": "recents_endpoint",
+        "endpoint": {
+            "path": "recents",
+            "paginator": {
+                "type": "offset",
+                "offset": 0,
+                "limit": 100
+            }
+        }
+    },
+    {
+        "name": "regular_endpoint",
+        "endpoint": {
+            "path": "items",
+            "paginator": {
+                "type": "cursor",
+                "cursor_path": "meta.next_cursor",
+                "offset_param": "cursor"
+            }
+        }
+    }
+]
+```
+
+5. Resource Defaults & Endpoint Details
+Ensure that the default settings applied across all resources are clearly delineated:
+
+Defaults:
+• Specify the default primary key (e.g., "id").
+• Define the write disposition (e.g., "merge").
+• Include common endpoint parameters (for example, a default limit value like 50).
+
+Resource-Specific Configurations:
+• For each resource, extract the endpoint path, method, and any additional query parameters.
+• If incremental loading is supported, include the minimal incremental configuration (using fields like "start_param", "cursor_path", and "initial_value"), but try to keep it within the REST API config portion.
+
+6. Incremental Loading Configuration
+Configure incremental loading for efficient data extraction:
+
+Timestamp-Based:
+```python
+"incremental": {
+    "start_param": "updated_since",
+    "cursor_path": "data.last_updated",
+    "initial_value": "2024-01-01T00:00:00Z",
+    "date_format": "%Y-%m-%dT%H:%M:%SZ"
+}
+```
+
+ID-Based:
+```python
+"incremental": {
+    "start_param": "min_id",
+    "cursor_path": "data.id",
+    "initial_value": 0,
+    "type": "integer"
+}
+```
+
+Cursor-Based:
+```python
+"incremental": {
+    "cursor_path": "meta.next_cursor",
+    "start_param": "cursor",
+    "initial_value": None,
+    "type": "string"
+}
+```
+
+7. State Management
+Implement proper state management for long-running processes:
+
+Basic State Storage:
+```python
+pipeline = dlt.pipeline(
+    pipeline_name="incremental_api",
+    destination="duckdb",
+    dataset_name="api_data"
+)
+
+info = pipeline.run(source, write_disposition="merge")
+current_state = info.load_state
+```
+
+Custom State Management:
+```python
+"state_management": {
+    "store_state": True,
+    "state_key": "last_processed_id",
+    "resume_from_state": True
+}
+```
+
+8. Rate Limiting and Backoff
 Configure rate limiting to prevent API throttling:
 
-### Basic Rate Limiting:
+Basic Rate Limiting:
 ```python
 "rate_limit": {
     "calls": 100,
@@ -140,7 +201,7 @@ Configure rate limiting to prevent API throttling:
 }
 ```
 
-### Advanced Rate Limiting:
+Advanced Rate Limiting:
 ```python
 "rate_limit": {
     "strategy": "adaptive",
@@ -152,10 +213,10 @@ Configure rate limiting to prevent API throttling:
 }
 ```
 
-## 8. Dependent Resources
+9. Dependent Resources
 Configure resources that depend on data from other resources:
 
-### Parent-Child Relationships:
+Parent-Child Relationships:
 ```python
 "resources": [
     {
@@ -179,10 +240,10 @@ Configure resources that depend on data from other resources:
 ]
 ```
 
-## 9. Testing and Troubleshooting
+10. Testing and Troubleshooting
 Implement comprehensive testing:
 
-### Mock Response Testing:
+Mock Response Testing:
 ```python
 def test_api_pagination():
     mock_responses = [
@@ -201,21 +262,111 @@ def test_api_pagination():
         assert info.load_packages == 2
 ```
 
-## 10. Best Practices
-- Use appropriate pagination methods for your API
-- Implement proper error handling and retry logic
-- Monitor API usage and rate limits
-- Use incremental loading where possible
-- Implement proper state management
-- Test thoroughly with mock responses
-- Handle dependent resources carefully
-- Use appropriate batch sizes
-- Monitor and log API interactions
+11. Best Practices
+• Use appropriate pagination methods for your API
+• Implement proper error handling and retry logic
+• Monitor API usage and rate limits
+• Use incremental loading where possible
+• Implement proper state management
+• Test thoroughly with mock responses
+• Handle dependent resources carefully
+• Use appropriate batch sizes
+• Monitor and log API interactions
 
-## 11. Advanced Resource Configuration
+12. Template Example
+Below is an annotated template that illustrates how your output should look. Use it as a reference to guide your extraction:
+
+```python
+import dlt
+from dlt.sources.rest_api import rest_api_source
+
+# Build the REST API config with cursor-based pagination
+source = rest_api_source({
+    "client": {
+        "base_url": "https://api.pipedrive.com/",  # Extract this from the docs/legacy code
+        "auth": {
+            "type": "api_key",                    # Use the documented auth type
+            "name": "api_token",
+            "api_key": dlt.secrets["api_token"],    # Replace with secure token reference
+            "location": "query"                     # Typically a query parameter for API keys
+        }
+    },
+    "resource_defaults": {
+        "primary_key": "id",                        # Default primary key for resources
+        "write_disposition": "merge",               # Default write mode
+        "endpoint": {
+            "params": {
+                "limit": 50                         # Default query parameter for pagination size
+            }
+        }
+    },
+    "resources": [
+        {
+            "name": "deals",                        # Example resource name extracted from code or docs
+            "endpoint": {
+                "path": "v1/recents",               # Endpoint path to be appended to base_url
+                "method": "GET",                    # HTTP method (default is GET)
+                "params": {
+                    "items": "deal"
+                },
+                "data_selector": "data.*",          # JSONPath to extract the actual data
+                "paginator": {                      # Endpoint-specific paginator
+                    "type": "offset",
+                    "offset": 0,
+                    "limit": 100
+                },
+                "incremental": {                    # Optional incremental configuration
+                    "start_param": "since_timestamp",
+                    "cursor_path": "update_time",
+                    "initial_value": "2023-01-01 00:00:00"
+                }
+            }
+        }
+    ]
+})
+
+if __name__ == "__main__":
+    pipeline = dlt.pipeline(
+        pipeline_name="pipedrive_rest",
+        destination="duckdb",
+        dataset_name="pipedrive_data"
+    )
+    pipeline.run(source)
+```
+
+13. How to Apply This Rule
+Extraction:
+• Search both the REST API docs and any legacy pipeline code for all mentions of "cursor" or "pagination".
+• Identify the exact keys and JSONPath expressions needed for the cursor field.
+• Look for authentication requirements and rate limiting information.
+• Identify any dependent resources and their relationships.
+• Check for multiple pagination strategies across different endpoints.
+
+Configuration Building:
+• Assemble the configuration in a dictionary that mirrors the structure in the example.
+• Ensure that each section (client, resource defaults, resources) is as declarative as possible.
+• Implement proper state management and incremental loading where applicable.
+• Configure rate limiting based on API requirements.
+• Configure pagination at the endpoint level when multiple strategies exist.
+
+Verification:
+• Double-check that the configuration uses the REST API config keys correctly.
+• Verify that no extraneous Python code is introduced.
+• Test the configuration with mock responses.
+• Verify rate limiting and error handling.
+• Test pagination separately for each endpoint type.
+
+Customization:
+• Allow for adjustments (like modifying the "initial_value") where incremental loading is desired.
+• Customize rate limiting parameters based on API requirements.
+• Adjust batch sizes and pagination parameters as needed.
+• Implement custom error handling and retry logic where necessary.
+• Handle different pagination strategies appropriately.
+
+14. Advanced Resource Configuration
 Enhance your resource configurations with these patterns:
 
-### Data Selection Patterns:
+Data Selection Patterns:
 ```python
 "endpoint": {
     "data_selector": "data.items.*",  # Basic array selection
@@ -226,7 +377,7 @@ Enhance your resource configurations with these patterns:
 }
 ```
 
-### Response Transformation:
+Response Transformation:
 ```python
 def transform_response(response_data):
     """Custom response transformation"""
@@ -256,7 +407,7 @@ source = rest_api_source({
 })
 ```
 
-### Resource-Level Error Handling:
+Resource-Level Error Handling:
 ```python
 "endpoint": {
     "error_handler": {
@@ -268,10 +419,10 @@ source = rest_api_source({
 }
 ```
 
-## 12. Advanced Authentication Scenarios
+15. Advanced Authentication Scenarios
 Handle complex authentication requirements:
 
-### Custom Authenticator:
+Custom Authenticator:
 ```python
 from dlt.sources.helpers.rest_client.auth import BaseAuthenticator
 
@@ -302,7 +453,7 @@ source = rest_api_source({
 })
 ```
 
-### Multi-Step Authentication:
+Multi-Step Authentication:
 ```python
 class MultiStepAuthenticator(BaseAuthenticator):
     def __init__(self, credentials):
@@ -322,10 +473,10 @@ class MultiStepAuthenticator(BaseAuthenticator):
         self._session_token = self._exchange_for_session(temp_token)
 ```
 
-## 13. Response Processing
+16. Response Processing
 Handle complex response scenarios:
 
-### Response Validation:
+Response Validation:
 ```python
 def validate_response(response):
     """Custom response validation"""
@@ -348,7 +499,7 @@ source = rest_api_source({
 })
 ```
 
-### Data Processing Pipeline:
+Data Processing Pipeline:
 ```python
 def process_data_pipeline(data):
     """Multi-step data processing"""
@@ -373,7 +524,7 @@ source = rest_api_source({
 })
 ```
 
-### Error Recovery:
+Error Recovery:
 ```python
 def handle_error(response, retry_count):
     """Custom error recovery"""
@@ -393,10 +544,10 @@ source = rest_api_source({
 })
 ```
 
-## 14. Feature Extraction from API Responses
+17. Feature Extraction from API Responses
 Extract and process features from REST API responses with these patterns:
 
-### Common API Response Patterns:
+Common API Response Patterns:
 ```python
 # Standard REST API response pattern
 {
@@ -442,7 +593,7 @@ Extract and process features from REST API responses with these patterns:
 }
 ```
 
-### Feature Extraction from Common Patterns:
+Feature Extraction from Common Patterns:
 ```python
 # Standard REST response feature extraction
 "endpoint": {
@@ -476,7 +627,7 @@ Extract and process features from REST API responses with these patterns:
 }
 ```
 
-### API-Specific Feature Processing:
+API-Specific Feature Processing:
 ```python
 def process_api_features(response_data):
     """Process features from API-specific response format"""
@@ -526,7 +677,7 @@ source = rest_api_source({
 })
 ```
 
-### Paginated Response Feature Extraction:
+Paginated Response Feature Extraction:
 ```python
 def extract_paginated_features(response_data, page_info):
     """Extract features from paginated responses"""
@@ -564,7 +715,7 @@ source = rest_api_source({
 })
 ```
 
-### Error Handling in Feature Extraction:
+Error Handling in Feature Extraction:
 ```python
 def handle_api_errors(response):
     """Handle API-specific errors during feature extraction"""
@@ -619,7 +770,7 @@ source = rest_api_source({
 })
 ```
 
-### API Feature Extraction Best Practices:
+API Feature Extraction Best Practices:
 1. **Response Structure Understanding**:
    - Study the API documentation for response patterns
    - Identify common data structures
@@ -648,4 +799,5 @@ source = rest_api_source({
 6. **Documentation**:
    - Document feature extraction patterns
    - Note any API-specific considerations
-   - Include examples of common response formats 
+   - Include examples of common response formats
+

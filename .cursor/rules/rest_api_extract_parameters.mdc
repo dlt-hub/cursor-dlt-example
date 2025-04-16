@@ -1,0 +1,6 @@
+---
+description: Use this rule when you are searching documentation or code for the parameters needed for building rest api source (base url etc), so use this when i am asking you to build rest api source based on docs or code.
+globs: 
+alwaysApply: false
+---
+ 
