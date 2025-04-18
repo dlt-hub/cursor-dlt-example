@@ -93,33 +93,6 @@ When analyzing the API documentation, carefully check for multiple pagination st
   - Document which endpoints use which pagination strategy
   - Test pagination separately for each endpoint type
 
-Example of Multiple Pagination Strategies:
-```python
-"resources": [
-    {
-        "name": "recents_endpoint",
-        "endpoint": {
-            "path": "recents",
-            "paginator": {
-                "type": "offset",
-                "offset": 0,
-                "limit": 100
-            }
-        }
-    },
-    {
-        "name": "regular_endpoint",
-        "endpoint": {
-            "path": "items",
-            "paginator": {
-                "type": "cursor",
-                "cursor_path": "meta.next_cursor",
-                "offset_param": "cursor"
-            }
-        }
-    }
-]
-```
 
 5. Resource Defaults & Endpoint Details
 Ensure that the default settings applied across all resources are clearly delineated:
